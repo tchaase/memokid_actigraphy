@@ -51,32 +51,25 @@ Sleep_Sadeh_Validated <- actigraph.sleepr::combine_epochs_periods(Sleep_Sadeh, W
 ## Sleep duration computation -----
 # The data object is of the type POSIXct, that is seconds after 1.1.1970. But iterating over POSIXlt might be easier, so I am trying this first. 
 Sleep_Sadeh_Validated$timestamp_list <- as.POSIXlt.POSIXct(Sleep_Sadeh_Validated$timestamp)
-day = 1
-days = 14 #needs to be replaced per participant to indicate how many days of accurate data are exist
+day <- 1
 Sleep_Sadeh_Validated['day_night'] <- NA
-for (i in 1:nrow(Sleep_Sadeh_Validated)){
+for (i in 1:nrow(Sleep_Sadeh_Validated)) {
   timestamp_variable <- as.POSIXlt(Sleep_Sadeh_Validated$timestamp[i])
-  if(timestamp_variable$hour == 18 & timestamp_variable$min == 0 & timestamp_variable$sec == 0){
-  Sleep_Sadeh_Validated[c(i : (i+ 1440)),]$day_night <- day
-  day =+ 1}
-  else {print("not yet")}
-    
+  
+  if(timestamp_variable$hour == 18 & timestamp_variable$min == 0 & timestamp_variable$sec == 0) {
+  Sleep_Sadeh_Validated[c(i : (i+ 1439)),]$day_night <- day
+  day <- day + 1}
+ }
+}
+
+for (i in 1:nrow(Sleep_Sadeh_Validated)) {
+  timestamp_variable <- as.POSIXlt(Sleep_Sadeh_Validated$timestamp[i])
+  
+  if (timestamp_variable$hour == 18 & timestamp_variable$min == 0 & timestamp_variable$sec == 0) {
+    Sleep_Sadeh_Validated[i:(i + 1439),]$day_night <- day
+    day <- day + 1
   }
-typeof(Sleep_Sadeh_Validated$timestamp[[2]] == 18:00:00) 
-?repeat()
-     in range(1, nrow(Sleep_Sadeh_Validated))
-     if Sleep_Sadeh_Validated$timestamp == 18:00:00
-     { Sleep_Sadeh_Validated[c(i : (i+ 1440)), ];  i =+ 1 ; }
-     else 
-       pass 
-install.packages("openair")
-as.data.frame.POSIXlt(Sleep_Sadeh_Validated$timestamp[[i]]) == 18:00:00
-openair:::timeAverage
-
-test <- Sleep_Sadeh_Validated$timestamp[[1]]
-unclass(test)
-
-test <- as.POSIXlt(Sleep_Sadeh_Validated$timestamp[1]) 
+}
 
 #What is my goal here? Iterate through columns by days and then create new data_set named by participant id and the corresponding day, so need a running counter that goes up by one
 
