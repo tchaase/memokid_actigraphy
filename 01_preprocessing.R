@@ -49,7 +49,7 @@ Sleep_Sadeh_Validated <- actigraph.sleepr::combine_epochs_periods(Sleep_Sadeh, W
   # This object now contains another column that indicates if the device was worn.
 
 ## Sleep duration computation -----
-# The data object is of the type POSIXct, that is seconds after 1.1.1970. But iterating over POSIXlt might be easier, so I am trying this first. 
+ # Firstly the timestamp is is changed to be a Posixlt. This way its a list object that I can easily use to create a variable that indexes each day.  
 Sleep_Sadeh_Validated$timestamp_list <- as.POSIXlt.POSIXct(Sleep_Sadeh_Validated$timestamp)
 day <- 1
 Sleep_Sadeh_Validated['day_night'] <- NA
@@ -60,10 +60,16 @@ for (i in 1:nrow(Sleep_Sadeh_Validated)) {
   Sleep_Sadeh_Validated[c(i : (i+ 1439)),]$day_night <- day
   day <- day + 1}
  }
+ # Now I will compute the mean sleep for each day. Note that periods where the device wasn't worn aren't included:
 
-#What is my goal here? Iterate through columns by days and then create new data_set named by participant id and the corresponding day, so need a running counter that goes up by one
-
-# Questions: How to compute sleep? Iterate over timestamp but problems with midnight?  How to deal with unix time codes. 
+#Calculate sleep duration per day
+sleep_duration <- aggregate(
+  ifelse(Sleep_Sadeh_Validated$sleep == "S" & !is.na(Sleep_Sadeh_Validated$period_id), 1, 0),
+  by = list(day_night = Sleep_Sadeh_Validated$day_night),
+  FUN = sum
+)
+print(sleep_duration) # Print sleep duration per day
+ 
 
 # Sleep quality computation
 
