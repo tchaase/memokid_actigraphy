@@ -60,16 +60,6 @@ for (i in 1:nrow(Sleep_Sadeh_Validated)) {
   Sleep_Sadeh_Validated[c(i : (i+ 1439)),]$day_night <- day
   day <- day + 1}
  }
-}
-
-for (i in 1:nrow(Sleep_Sadeh_Validated)) {
-  timestamp_variable <- as.POSIXlt(Sleep_Sadeh_Validated$timestamp[i])
-  
-  if (timestamp_variable$hour == 18 & timestamp_variable$min == 0 & timestamp_variable$sec == 0) {
-    Sleep_Sadeh_Validated[i:(i + 1439),]$day_night <- day
-    day <- day + 1
-  }
-}
 
 #What is my goal here? Iterate through columns by days and then create new data_set named by participant id and the corresponding day, so need a running counter that goes up by one
 
