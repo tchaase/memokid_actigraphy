@@ -59,19 +59,50 @@ for (i in 1:nrow(Sleep_Sadeh_Validated)) {
   if(timestamp_variable$hour == 18 & timestamp_variable$min == 0 & timestamp_variable$sec == 0) {
   Sleep_Sadeh_Validated[c(i : (i+ 1439)),]$day_night <- day
   day <- day + 1}
- }
+}
+
+
  # Now I will compute the mean sleep for each day. Note that periods where the device wasn't worn aren't included:
 
 #Calculate sleep duration per day
 sleep_duration <- aggregate(
   ifelse(Sleep_Sadeh_Validated$sleep == "S" & !is.na(Sleep_Sadeh_Validated$period_id), 1, 0),
   by = list(day_night = Sleep_Sadeh_Validated$day_night),
-  FUN = sum
-)
+  FUN = sum)
 print(sleep_duration) # Print sleep duration per day
  
 
-# Sleep quality computation
+# Sleep quality computation -----
+ # Next sleep quality will be computed. Sleep quality will be defined as the mean value of the sleep fragmentation index across periods of nightly sleep.
+ # Nightly sleep will thusly be defined as sleep periods within the window of 7pm to 12 am.
+Sleep <- actigraph.sleepr::apply_tudor_locke(Sleep_Sadeh_Validated[,], min_sleep_period = 60)
+ # For convenience I am just going to define a function that will be used to filter the nonwear time vs. the sleep time as indicated by the algorithm above. 
+overlap <- mapply(function(sleep_start, sleep_end, nonwear_start, nonwear_end) 
+    {any(sleep_start <= nonwear_end & sleep_end >= nonwear_start)}, 
+    Sleep$onset, Sleep$out_bed_time, Non_Wear_Time_Summary$startTimeStamp, Non_Wear_Time_Summary$endTimeStamp)
+
+ # Filter the sleep periods based on the overlap vector
+filtered_sleep_data <- Sleep[!overlap, ]
+
+ # Filter based on the time to get the nightly sleep.
+  # Firstly convert to appropriate format:
+filtered_sleep_data$in_bed_time <- format(as.POSIXct(filtered_sleep_data$in_bed_time), "%H:%M:%OS")
+filtered_sleep_data$out_bed_time <- format(as.POSIXct(filtered_sleep_data$out_bed_time), "%H:%M:%OS")
+filtered_sleep_data[filtered_sleep_data$in_bed_time <= "12:00:00" | filtered_sleep_data$in_bed_time >= "19:00:00", ] -> Sleep_night
+Sleep_night[Sleep_night$out_bed_time >= "19:00:00" | Sleep_night$in_bed_time <= "12:00:00", ] -> Sleep_night
+ # Compute sleep quality, I will use a for loop similarily to the one above. Again, its easier to do such a loop via Posixlt.
+night <- 1
+Sleep_night$night_indicator <- NA
+
+  # This is a work in progress as the count "night" still doesnt work. It should increase only when the sleep period is on the next day...need to figure out how to do this or aggregate by day?
+for (i in 1:nrow(Sleep_night)) {
+    if (Sleep_night[i,]$onset >= 19:00:00 | Sleep_night[i,]$onset <= 12:00:00 || Sleep_night[i,]$out_bed_time > 19:00:00 | Sleep_night[i,]$out_bed_time <= 12:00:00) {
+    Sleep_night$night_indicator[i] <- night
+    night <- night + 1  }
+}
+as.POSIXlt(Sleep_Sadeh_Validated[1,]$timestamp)$hour
+
+
 
 
 ##Dataframe
