@@ -15,7 +15,7 @@ part_id <- XXXXX # Participant's idea is inserted here. Use the search function 
 ## Wear-Time Validation ----
   # Firstly the usual R-set up related to the working directory. 
 getwd()
-setwd("/home/tchaase/Documents/Universitaet/Bachelorarbeit/Actigraphy-Analyses/Actigraphy_2/YK_Preterm/")
+setwd("/home/tchaase/Documents/Universitaet/Bachelorarbeit/Actigraphy-Analyses/Actigraphy_2/Young_Adults/")
 
   # Here I mark the data for every 10s indicating whether the device was worn or not. Firstly the data is loaded via the R-package provided by the authors Choi et al. 
 PhysicalActivity::readActigraph("XXXXX_10sec.agd") -> Wear_Time
@@ -37,7 +37,7 @@ wt_old <- 1 # how many had to be excluded due to the old criterion of 8 hours no
 
 ## Sleep-analyses ----
 dir()  # Checking what files are available and to copy the relevant files. 
-actigraph.sleepr::read_agd("12024_10sec.agd") -> Sleep # Copy the file that corresponds to the relevant test subject. 
+actigraph.sleepr::read_agd("XXXXX_10sec.agd") -> Sleep # Copy the file that corresponds to the relevant test subject. 
 
 # Changing a few variable names:
 data.frame(Wear_Time$TimeStamp, Sleep[2:10]) -> Sleep
@@ -93,44 +93,34 @@ filtered_sleep_data$out_bed_time_hours <- format(as.POSIXct(filtered_sleep_data$
 filtered_sleep_data[filtered_sleep_data$in_bed_time_hours <= "12:00:00" | filtered_sleep_data$in_bed_time_hours >= "19:00:00", ] -> Sleep_night
 Sleep_night[Sleep_night$out_bed_time_hours >= "19:00:00" | Sleep_night$in_bed_time_hours <= "12:00:00", ] -> Sleep_night
  # Compute sleep quality, I will use a for loop similarly to the one above. Again, its easier to do such a loop via Posixlt.
-night <- 1
-Sleep_night$night_indicator <- NA
-
-  # This is a work in progress as the count "night" still doesnt work. It should increase only when the sleep period is on the next day...need to figure out how to do this or aggregate by day?
-for (i in 1:nrow(Sleep_night)) {
-    if (Sleep_night[i,]$onset >= 19:00:00 | Sleep_night[i,]$onset <= 12:00:00 || Sleep_night[i,]$out_bed_time > 19:00:00 | Sleep_night[i,]$out_bed_time <= 12:00:00) {
-    Sleep_night$night_indicator[i] <- night
-    night <- night + 1  }
-}
 
 night_border <- as.POSIXlt("19:00:00", format = "%H:%M:%S")
 morning_border <- as.POSIXlt("12:00:00", format = "%H:%M:%S")
-
 Sleep_night$night_indicator <- NA  # Initialize the night_indicator column
 night <- 1  # Initialize the night index
 current_day <- as.Date(Sleep_night$onset[1])  # Get the date of the first night
 skip_counter = FALSE
 Sleep_night$onsetlt <- as.POSIXlt(Sleep_night$onset, format = "%H:%M:%S") ; Sleep_night$out_bed_timelt <- as.POSIXlt(Sleep_night$out_bed_time, format = "%H:%M:%S")
 
+# Firstly I need to set the current day. Why does the counter sometimes equal the current day -1? Because per my definition a day starts at 12. 
+# setting the first day as one day before makes it so my loops actually work easier, because this is the same set up I would have in the mid. 
+if (Sleep_night$onset[1] <= as.POSIXlt("12:00:00", format = "%H:%M:%S")){current_day - 1 -> current_day}
 
-if (Sleep_night$onset[1] <= as.POSIXlt("12:00:00", format = "%H:%M:%S")){
-    current_day - 1 -> current_day 
-  }
 for (i in 1:nrow(Sleep_night)){  
   if (as.Date(Sleep_night$onset[i]) == current_day & as.numeric(Sleep_night$onsetlt[i]$hour) >= 19 & skip_counter == FALSE){
       Sleep_night$night_indicator[i] <- night
+      skip_counter <- FALSE
       message("Code 1: Through sleep. Sleep period from ", format(Sleep_night$onset[i], "%H:%M:%S"),
               " to ", format(Sleep_night$out_bed_time[i], "%H:%M:%S"), " assigned to night ", night,
               " - The current date is: ", format(current_day, "%Y-%m-%d"), " - ", i, " - ", skip_counter)
-     skip_counter <- FALSE
      # Won't happen often. Only on the first night. 
   } else if (as.numeric(Sleep_night$onsetlt[i]$hour) <= 12 && as.numeric(Sleep_night$out_bed_timelt[i]$hour) <= 12 && (current_day + 1) == as.Date(Sleep_night$onset[i]) && skip_counter == FALSE) {
     current_day <- as.Date(Sleep_night$onset[i])
     Sleep_night$night_indicator[i] <- night
+    skip_counter <- TRUE
     message("Code 2: Late sleep. Sleep period from ", format(Sleep_night$onset[i], "%H:%M:%S"),
             " to ", format(Sleep_night$out_bed_time[i], "%H:%M:%S"), " assigned to night ", night,
             " - The current date is: ", format(current_day, "%Y-%m-%d"), " - ", i, " - ", skip_counter)
-    skip_counter <- TRUE
   } else if (as.numeric(Sleep_night$onsetlt[i]$hour) <= 12 && current_day == as.Date(Sleep_night$onset[i]) && skip_counter == TRUE) {
     Sleep_night$night_indicator[i] <- night
     message("Code 3: Wake up sleep, after short sleep after midnight. Sleep period from ", format(Sleep_night$onset[i], "%H:%M:%S"),
@@ -184,11 +174,64 @@ for (i in 1:nrow(Sleep_night)){
               " - The current date is: ", format(current_day, "%Y-%m-%d"), " - ", i, " - ", skip_counter)
       skip_counter <- TRUE
       # Most likely to occur if person goes to sleep after midnight each day. 
-   } else 
-    message(i, " - ", skip_counter)
-} 
+  } else if (as.Date(Sleep_night$onset[i]) == current_day +3) {
+    if (as.numeric(Sleep_night$onsetlt[i]$hour) <= 12){
+      if (skip_counter == TRUE){night <- night +1}
+      night <- night + 2
+      Sleep_night$night_indicator[i] <- night
+      current_day <- as.Date(Sleep_night$onset[i])
+      skip_counter = TRUE}
+    else if (as.numeric(Sleep_night$onsetlt[i]$hour) >= 19){
+      if (skip_counter == TRUE){night <- night +1}
+      night <- night + 3
+      Sleep_night$night_indicator[i] <- night
+      current_day <- as.Date(Sleep_night$onset[i])
+      skip_counter = FALSE}
+      message("Skip 3 nights in row: ","Night:  ", night, " Current day is ", current_day, " - ", skip_counter)
+  } else if (as.Date(Sleep_night$onset[i]) == current_day +4) {
+    if (as.numeric(Sleep_night$onsetlt[i]$hour) <= 12){
+      if (skip_counter == TRUE){night <- night +1}
+      night <- night + 3
+      Sleep_night$night_indicator[i] <- night
+      current_day <- as.Date(Sleep_night$onset[i])
+      skip_counter = TRUE}
+    else if (as.numeric(Sleep_night$onsetlt[i]$hour) >= 19){
+      if (skip_counter == TRUE){night <- night +1}
+      night <- night + 4
+      Sleep_night$night_indicator[i] <- night
+      current_day <- as.Date(Sleep_night$onset[i])
+      skip_counter = FALSE}
+    message("Skip 4 nights in row: ","Night:  ", night, " Current day is ", current_day, " - ", skip_counter)
+  } else if (as.Date(Sleep_night$onset[i]) == current_day +5) {
+    if (as.numeric(Sleep_night$onsetlt[i]$hour) <= 12){
+      if (skip_counter == TRUE){night <- night +1}
+      night <- night + 4
+      current_day <- as.Date(Sleep_night$onset[i])
+      skip_counter = TRUE}
+    else if (as.numeric(Sleep_night$onsetlt[i]$hour) >= 19){
+      if (skip_counter == TRUE){night <- night +1}
+      night <- night + 5
+      Sleep_night$night_indicator[i] <- night
+      current_day <- as.Date(Sleep_night$onset[i])
+      skip_counter = FALSE}
+    message("Skip 5 nights in row: ","Night:  ", night, " Current day is ", current_day, " - ", skip_counter)
+  } else if (as.Date(Sleep_night$onset[i]) == current_day + 6) {
+    if (as.numeric(Sleep_night$onsetlt[i]$hour) <= 12){
+      if (skip_counter == TRUE){night <- night +1}
+      night <- night + 5
+      Sleep_night$night_indicator[i] <- night
+      current_day <- as.Date(Sleep_night$onset[i])
+      skip_counter = TRUE}
+    else if (as.numeric(Sleep_night$onsetlt[i]$hour) >= 19){
+      if (skip_counter == TRUE){night <- night +1}
+      night <- night + 6
+      Sleep_night$night_indicator[i] <- night
+      current_day <- as.Date(Sleep_night$onset[i])
+      skip_counter = FALSE}
+    message("Skip 6 nights in row: ","Night:  ", night, " Current day is ", current_day, " - ", skip_counter)
+  }
+} # need to still work on adjusting the day count here.   
 # Some of these combinations are unlikely to occur, but were added just so this can never fail. Over time I should get rid of the unnecessary options. 
-
 
 weighted_avg_per_night <- Sleep_night %>%
   group_by(night_indicator) %>%
@@ -200,17 +243,54 @@ sleep_day_values <- merge(weighted_avg_per_night, sleep_duration, by = "night_in
 colnames(sleep_day_values)[colnames(sleep_day_values) == "x"] <- "duration"
 
 
+# Dataframe ----
+# Now I have all the values. Firstly the ID, the respective sleep values per day. However, I still need to use string formatting to create the respective sleep variables
+# to which the values will then be assigned. 
+
+if (nrow(sleep_day_values) < 16) {
+  # Generate night indicator values for the missing rows
+  night_indicator <- (nrow(sleep_day_values) + 1):16
+  
+  # Create a data frame with missing nights
+  missing_nights <- data.frame(
+    night_indicator = night_indicator,
+    weighted_avg = -99,
+    duration = -99
+  )
+  
+  # Bind the missing nights to the bottom of the data frame
+  sleep_day_values <- rbind(sleep_day_values, missing_nights)
+}
+
+# Create an empty data frame for the wide format
+wide_format <- data.frame(part_id = part_id,
+                          stringsAsFactors = FALSE)
+
+# Loop through each night
+for (i in 1:16) {
+  col_names_avg <- paste0("weighted_avg_night_", i)
+  col_names_dur <- paste0("duration_night_", i)
+  
+  # Check if the index is within the available range
+  if (i <= nrow(sleep_day_values)) {
+    wide_format[[col_names_avg]] <- sleep_day_values$weighted_avg[i]
+    wide_format[[col_names_dur]] <- sleep_day_values$duration[i]
+  } else {
+    wide_format[[col_names_avg]] <- -99
+    wide_format[[col_names_dur]] <- -99
+  }
+}
+
+
 ##Dataframe
-#data.frame(matrix(ncol=47, nrow=0))-> sleep_data
-#colnames(sleep_data) <- c("part_id", "wt", "wt_old", "comment" )
-load("sleep_data_124.RData")
-data.frame(matrix(c(part_id ,  wt ,  wt_old , comment), nrow = 1)) ->subfile
-colnames(subfile) <- c("part_id", "wt", "wt_old", "comment" )
-sleep_data<-rbind(sleep_data, subfile)
-#sleep_data[-64,] -> sleep_data #Leaving this here in case I need to remove a participant. 
+# Load the data from the CSV file using fread
+library(data.table)
+loaded_data <- data.table::fread(file = "/home/tchaase/Documents/Universitaet/Bachelorarbeit/Actigraphy-Analyses/Actigraphy_2/preprocessed/sleep_data.csv")
 
-openxlsx::write.xlsx(sleep_data, file = "sleep_XXXXX.xlsx")
+# Append the wide format data to the sleep_data data set
+appended_data <- rbindlist(list(wide_format, loaded_data))
 
-#End of session
-save(sleep_data, file = "sleep_data_124.RData")
-?actigraph.sleepr::apply_tudor_locke()
+# Save the appended data to the CSV file using fwrite
+data.table::fwrite(appended_data, "/home/tchaase/Documents/Universitaet/Bachelorarbeit/Actigraphy-Analyses/Actigraphy_2/preprocessed/sleep_data.csv")
+
+data.table::fwrite(wide_format, "/home/tchaase/Documents/Universitaet/Bachelorarbeit/Actigraphy-Analyses/Actigraphy_2/preprocessed/sleep_data.csv")
