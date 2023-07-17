@@ -15,8 +15,8 @@ part_id <- XXXXX # Participant's idea is inserted here. Use the search function 
 ## Wear-Time Validation ----
   # Firstly the usual R-set up related to the working directory. 
 getwd()
-setwd("/home/tchaase/Documents/Universitaet/Bachelorarbeit/Actigraphy-Analyses/Actigraphy_2/Young_Adults/")
-
+setwd("/home/tchaase/Documents/Universitaet/Bachelorarbeit/Actigraphy-Analyses/Actigraphy_2/YK_Preterm/")
+  list.files()
   # Here I mark the data for every 10s indicating whether the device was worn or not. Firstly the data is loaded via the R-package provided by the authors Choi et al. 
 PhysicalActivity::readActigraph("XXXXX_10sec.agd") -> Wear_Time
   # perMinuteCts how much data is valid. This is relevant but only makes sense if you set it in relation to how much data there SHOULD be, which can easily be done with the next row of code.
@@ -32,8 +32,11 @@ Non_Wear_Time_Summary$duration /6/60 > 4
 Non_Wear_Time_Summary$duration /6/60  # See the duration of the No-WT
 
   # Manually setting the days with two high wear time: 
-wt <- 2 #0 = everything is fine, and then the numbers indicate how many days had to be cut out. This is refers to both whole days that are cut out and nights that are deemed to be *not reliable* due to large chuncks of missing data according to the wear-time algorithm. The criterion for this is 4 hours!
-wt_old <- 1 # how many had to be excluded due to the old criterion of 8 hours non wear-time per night
+wt <- 0 #0 = everything is fine, and then the numbers indicate how many days had to be cut out. This is refers to both whole days that are cut out and nights that are deemed to be *not reliable* due to large chuncks of missing data according to the wear-time algorithm. The criterion for this is 4 hours!
+wt_old <- 0 # how many had to be excluded due to the old criterion of 8 hours non wear-time per night
+
+# comment <- "One day missing from 19 - 24, also had to exclude anything past 15 days as it showed 17 hours of non wear time"
+comment <- NA 
 
 ## Sleep-analyses ----
 dir()  # Checking what files are available and to copy the relevant files. 
@@ -56,13 +59,20 @@ day <- 1
 Sleep_Sadeh_Validated['night_indicator'] <- NA
 for (i in 1:nrow(Sleep_Sadeh_Validated)) {
   timestamp_variable <- as.POSIXlt(Sleep_Sadeh_Validated$timestamp[i])
+  first_column <- as.POSIXlt(Sleep_Sadeh_Validated$timestamp[1])
   
-  if(timestamp_variable$hour == 18 & timestamp_variable$min == 0 & timestamp_variable$sec == 0) {
-  Sleep_Sadeh_Validated[c(i : (i+ 1439)),]$night_indicator <- day
-  day <- day + 1}
+  if (i == 1 & first_column$hour > 12) {
+    # Compute the missing rows until the next 12 o'clock timestamp
+    next_12_index <- which(as.POSIXlt(Sleep_Sadeh_Validated$timestamp[1]) < as.POSIXlt(Sleep_Sadeh_Validated$timestamp) & as.POSIXlt(Sleep_Sadeh_Validated$timestamp)$hour == 12)[1]
+    Sleep_Sadeh_Validated[1:next_12_index, "night_indicator"] <- day
+    day <- day + 1
+  }
+  
+  if (timestamp_variable$hour == 12 & timestamp_variable$min == 0 & timestamp_variable$sec == 0) {
+    Sleep_Sadeh_Validated[i:(i + 1439), "night_indicator"] <- day
+    day <- day + 1
+  }
 }
-
-
  # Now I will compute the mean sleep for each day. Note that periods where the device wasn't worn aren't included:
 
 #Calculate sleep duration per day
@@ -75,22 +85,14 @@ print(sleep_duration) # Print sleep duration per day
 
 # Sleep quality computation -----
  # Next sleep quality will be computed. Sleep quality will be defined as the mean value of the sleep fragmentation index across periods of nightly sleep.
- # Nightly sleep will thusly be defined as sleep periods within the window of 7pm to 12 am.
+ # Nightly sleep will be defined as sleep periods within the window of 7pm to 12 am.
 Sleep <- actigraph.sleepr::apply_tudor_locke(Sleep_Sadeh_Validated[,], min_sleep_period = 60)
- # For convenience I am just going to define a function that will be used to filter the nonwear time vs. the sleep time as indicated by the algorithm above. 
-overlap <- mapply(function(sleep_start, sleep_end, nonwear_start, nonwear_end) 
-    {any(sleep_start <= nonwear_end & sleep_end >= nonwear_start)}, 
-    Sleep$onset, Sleep$out_bed_time, Non_Wear_Time_Summary$startTimeStamp, Non_Wear_Time_Summary$endTimeStamp)
-
- # Filter the sleep periods based on the overlap vector
-filtered_sleep_data <- Sleep[!overlap, ]
-filtered_sleep_data
 
  # Filter based on the time to get the nightly sleep.
   # Firstly convert to appropriate format:
-filtered_sleep_data$in_bed_time_hours <- format(as.POSIXct(filtered_sleep_data$in_bed_time), "%H:%M:%OS")
-filtered_sleep_data$out_bed_time_hours <- format(as.POSIXct(filtered_sleep_data$out_bed_time), "%H:%M:%OS")
-filtered_sleep_data[filtered_sleep_data$in_bed_time_hours <= "12:00:00" | filtered_sleep_data$in_bed_time_hours >= "19:00:00", ] -> Sleep_night
+Sleep$in_bed_time_hours <- format(as.POSIXct(Sleep$in_bed_time), "%H:%M:%OS")
+Sleep$out_bed_time_hours <- format(as.POSIXct(Sleep$out_bed_time), "%H:%M:%OS")
+Sleep[Sleep$in_bed_time_hours <= "12:00:00" | Sleep$in_bed_time_hours >= "19:00:00", ] -> Sleep_night
 Sleep_night[Sleep_night$out_bed_time_hours >= "19:00:00" | Sleep_night$in_bed_time_hours <= "12:00:00", ] -> Sleep_night
  # Compute sleep quality, I will use a for loop similarly to the one above. Again, its easier to do such a loop via Posixlt.
 
@@ -104,7 +106,7 @@ Sleep_night$onsetlt <- as.POSIXlt(Sleep_night$onset, format = "%H:%M:%S") ; Slee
 
 # Firstly I need to set the current day. Why does the counter sometimes equal the current day -1? Because per my definition a day starts at 12. 
 # setting the first day as one day before makes it so my loops actually work easier, because this is the same set up I would have in the mid. 
-if (Sleep_night$onset[1] <= as.POSIXlt("12:00:00", format = "%H:%M:%S")){current_day - 1 -> current_day}
+if (as.numeric(Sleep_night$onsetlt[1]$hour) <= 12){current_day - 1 -> current_day ; print("First day skipped, adjusted")}
 
 for (i in 1:nrow(Sleep_night)){  
   if (as.Date(Sleep_night$onset[i]) == current_day & as.numeric(Sleep_night$onsetlt[i]$hour) >= 19 & skip_counter == FALSE){
@@ -151,7 +153,7 @@ for (i in 1:nrow(Sleep_night)){
       skip_counter <- FALSE
   } else if (as.numeric(Sleep_night$onsetlt[i]$hour) <= 12 && (current_day + 2) == as.Date(Sleep_night$onset[i]) && skip_counter == TRUE) {
     current_day <- as.Date(Sleep_night$onset[i])  # Update current_day to the new day
-    night <- night + 1
+    night <- night + 2
     Sleep_night$night_indicator[i] <- night
     message("Code 7: Late sleep, but skip. Sleep period from ", format(Sleep_night$onset[i], "%H:%M:%S"),
             " to ", format(Sleep_night$out_bed_time[i], "%H:%M:%S"), " assigned to night ", night,
@@ -233,11 +235,16 @@ for (i in 1:nrow(Sleep_night)){
 } # need to still work on adjusting the day count here.   
 # Some of these combinations are unlikely to occur, but were added just so this can never fail. Over time I should get rid of the unnecessary options. 
 
+# IMPORTANT: We have two aquisition dates, where the data for the rest of the experimental paradigm is obtained. This somewhere on the first day, the second day and two weeks later. So exclude any periods here that also fall into non wear time windows, as we safely know that this will not be time where the person was asleep.
+#Sleep_night <- Sleep_night[-c(),]
+
+
 weighted_avg_per_night <- Sleep_night %>%
   group_by(night_indicator) %>%
   summarize(weighted_avg = weighted.mean(sleep_fragmentation_index, w = duration, na.rm = TRUE))
 # Inspect if this makes sense:
 print(weighted_avg_per_night)
+
 
 sleep_day_values <- merge(weighted_avg_per_night, sleep_duration, by = "night_indicator", all = TRUE)
 colnames(sleep_day_values)[colnames(sleep_day_values) == "x"] <- "duration"
@@ -246,7 +253,7 @@ colnames(sleep_day_values)[colnames(sleep_day_values) == "x"] <- "duration"
 # Dataframe ----
 # Now I have all the values. Firstly the ID, the respective sleep values per day. However, I still need to use string formatting to create the respective sleep variables
 # to which the values will then be assigned. 
-
+missing <- -99
 if (nrow(sleep_day_values) < 16) {
   # Generate night indicator values for the missing rows
   night_indicator <- (nrow(sleep_day_values) + 1):16
@@ -254,8 +261,8 @@ if (nrow(sleep_day_values) < 16) {
   # Create a data frame with missing nights
   missing_nights <- data.frame(
     night_indicator = night_indicator,
-    weighted_avg = -99,
-    duration = -99
+    weighted_avg = missing, 
+    duration = missing 
   )
   
   # Bind the missing nights to the bottom of the data frame
@@ -281,16 +288,15 @@ for (i in 1:16) {
   }
 }
 
+# Lasty, append the wear time values, as well as comments.
+wide_format <- cbind.data.frame(wide_format, wt, comment)
 
 ##Dataframe
 # Load the data from the CSV file using fread
 library(data.table)
-loaded_data <- data.table::fread(file = "/home/tchaase/Documents/Universitaet/Bachelorarbeit/Actigraphy-Analyses/Actigraphy_2/preprocessed/sleep_data.csv")
-
+loaded_data <- data.table::fread(file = "/home/tchaase/Documents/Universitaet/Bachelorarbeit/Actigraphy-Analyses/Actigraphy_2/preprocessed/sleep_data_XXXXX.csv")
 # Append the wide format data to the sleep_data data set
-appended_data <- rbindlist(list(wide_format, loaded_data))
+appended_data <- rbindlist(list(loaded_data, wide_format))
 
 # Save the appended data to the CSV file using fwrite
-data.table::fwrite(appended_data, "/home/tchaase/Documents/Universitaet/Bachelorarbeit/Actigraphy-Analyses/Actigraphy_2/preprocessed/sleep_data.csv")
-
-data.table::fwrite(wide_format, "/home/tchaase/Documents/Universitaet/Bachelorarbeit/Actigraphy-Analyses/Actigraphy_2/preprocessed/sleep_data.csv")
+data.table::fwrite(appended_data, "/home/tchaase/Documents/Universitaet/Bachelorarbeit/Actigraphy-Analyses/Actigraphy_2/preprocessed/sleep_data_XXXXX.csv")
